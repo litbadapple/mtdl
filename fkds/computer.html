@@ -1,1 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>谜题大陆——方块大师辅助工具</title>
 
+	<link rel="stylesheet" href="https://cdn.staticfile.org/font-awesome/4.7.0/css/font-awesome.css">
+	<!--script type="text/javascript" src="//api.tongjiniao.com/c?_=591661499739787264" async></script-->
+	<style>
+		.board {
+			width: 480px;
+			position: relative;
+		}
+        .top-align {
+            vertical-align: top;
+        }
+        .draggable {
+            width: 120px;
+            height: 120px;
+            position: absolute;
+            cursor: move;
+        }
+
+        .disable-dbl-tap-zoom {
+            touch-action: manipulation;
+        }	</style>
+</head>
+<body>
+<h2>谜题大陆——方块大师辅助工具</h2>
+
+<div>
+	<table cellpadding="0" cellspacing="2" width="0" border="0">
+		<tbody>
+			<tr class="top-align">
+				<td>
+					<table cellpadding="0" cellspacing="2" width="0" border="0">
+						<tbody>
+							<tr>
+								<td>
+									<canvas id="canvasOutput" class="disable-dbl-tap-zoom"></canvas>
+								</td>
+							</tr>
+							<tr>
+								<td>
+									<canvas id="canvasRound" class="disable-dbl-tap-zoom"></canvas>
+								</td>
+							</tr>
+							<tr>
+								<td align="center">
+									<p id="status"></p>
+								</td>
+							</tr>
+							<tr>
+								<td align="center">
+									<button type="button" id="InputButton" class="disable-dbl-tap-zoom" style="font-size:18px">选好啦!</button>
+									<button type="button" class="btn btn-primary btn-sm disable-dbl-tap-zoom" style="font-size:18px" id="step" disabled>
+										<i class="fa fa-caret-right"></i> 下一步
+									</button>
+									<button type="button" class="btn btn-warning btn-sm disable-dbl-tap-zoom" style="font-size:18px" id="reset" >
+										保存
+									</button>
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</td>
+				<td>
+					<canvas id="canvasSelector" class="disable-dbl-tap-zoom" />
+				</td>
+			</tr>
+		</tbody>
+	</table>
+</div>
+
+<script src="canvas.js" type="text/javascript"></script>
+<script src="board.js" type="text/javascript"></script>
+
+<script type="text/javascript">
+
+	let blockSize = 50;
+	let spacing = 3;
+	let width = getSize(9, blockSize, spacing);
+	let outCanvas = new board('canvasOutput', width, width, blockSize, spacing);
+	outCanvas.draw();
+
+	var selectedShape = [];
+
+	var you = new slover();
+    var putShapeCount = 0;
+
+	//outCanvas.drawBoard(testboard);
+	//outCanvas.drawShape(4, 5, shapes[5]);
+	let roundcanvas = new roundShape('canvasRound', width, 140);
+	let selectcanvas = new shapeSelector('canvasSelector', width);
+	selectcanvas.draw();
+	selectcanvas.addSelectedShapeChangedEventListener(function (e) {
+		selectedShape = [];
+        for (var i = 0; i < e.detail.length; i++) {
+            selectedShape.push(e.detail[i].shape);
+		}
+        // 更新computer的
+		roundcanvas.draw(selectedShape);
+		if (selectedShape.length == 3) {
+            selectButton.disabled = false;
+		}
+	});
+
+	let selectButton = document.getElementById('InputButton');
+	selectButton.onclick = onSelectButtonPress;
+	
+	var round = 0;
+	var total = 0;
+	var shapeList = new Array();
+	var solv = new slover();
+	var bestSolution = { step: [], strik: 0, score: 0, statusScore: 0 };
+	var curStep = 0;
+
+	function onSelectButtonPress() {
+		if (selectedShape.length == 3) {
+			shapeList.push({ 'round': round, 'shapes': selectedShape.slice() });
+
+			var score = 0;
+            for (const shape of selectedShape) {
+				for (const s of shape.s) {
+					score += s;				
+				}
+			}
+			selectButton.disabled = true;
+			selectcanvas.clearSelect();
+			selectcanvas.enable = false;
+
+			roundcanvas.draw([]);
+			total += score;
+			console.log(`round ${round}: ${score}, total ${total}`);
+			round++;
+            ShowStatus("计算中，请等待...");
+
+			// 新一轮放置，只需要保留strik和score
+			bestSolution.step = [];
+			bestSolution.statusScore = 1000000;
+			requestIdleCallback(() => {
+				if (putShapes(solv, selectedShape, bestSolution)) {
+					curStep = 0;
+                    ShowStatus("请跟随放置，然后点击下一步按钮");
+					onStepButtonPress();
+				}
+			});
+		}
+	}
+
+	function onStepButtonPress() {
+		if (curStep < bestSolution.step.length) {
+			var step = bestSolution.step[curStep];
+			outCanvas.drawBoard(solv.board);
+			outCanvas.drawShape(step.x, step.y, step.shape);
+			solv.putAt(step.x, step.y, step.shape);
+			let count = solv.checkAndEliminate();
+			curStep++;
+			if (curStep === bestSolution.step.length)
+			{
+				if (count > 0) {
+					// 如果三个放完，有可销的，那么等用户点下一步再消除，以便用户看清楚放置块
+					stepButton.disabled = false;
+				}
+				else {
+					// 保留现有的显示即可，请用户选择下一轮
+					stepButton.disabled = true;
+					selectcanvas.enable = true;
+					ShowStatus("请选择本轮所用3个图案");
+				}
+			}
+			else {
+                stepButton.disabled = false;
+			}
+		}
+		else if (curStep === bestSolution.step.length) {
+            stepButton.disabled = true;
+            selectcanvas.enable = true;
+			outCanvas.drawBoard(solv.board);
+            ShowStatus("请选择本轮所用3个图案");
+		}
+	}
+
+	function download(text, filename) {
+		var element = document.createElement('a');
+		element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+		element.setAttribute('download', filename);
+		element.style.display = 'none';
+		document.body.appendChild(element);
+
+		element.click();
+		document.body.removeChild(element);
+	} 
+
+    function ShowStatus(string) {
+        document.getElementById('status').innerHTML = string;
+	}
+
+	ShowStatus("请选择本轮所用3个图案");
+    selectButton.disabled = true;
+
+	let stepButton = document.getElementById('step');
+	stepButton.addEventListener('click', onStepButtonPress);
+	let resetButton = document.getElementById('reset');
+	resetButton.addEventListener('click', onResetButtonPress);
+	function onResetButtonPress() {
+		download(JSON.stringify(shapeList), `mtdl_fkds_${round}.json`);
+	}		
+	//let counter = document.querySelector('#counter');
+
+	const isMobile = /(iPhone|iPad|iPod|iOS|Android|Linux armv8l|Linux armv7l|Linux aarch64)/i.test(navigator.platform);
+	let windowRadio = window.innerWidth / window.innerHeight;
+	if (isMobile)
+		document.body.style.zoom = 2;
+	else
+		document.body.style.zoom = 1;
+</script>
+
+</body>
+</html>
