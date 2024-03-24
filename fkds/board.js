@@ -492,7 +492,90 @@ function backtrack(arr, used, current, result) {
 	}
 }
 
+var xyMap = new Map();
+function initXY() {
+	for (let value = 0; value < 512; value++) {
+		let divCount = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
+		let divValue = 0;
 
+		let v = value;
+		var gapSize = 0;
+
+		for (let i = 0; i < GAME_INFO.BOARD_SIZE_BLOCK; i++) {
+			var cellState = v % 2;
+			v = Math.floor(v / 2);
+			if (cellState && gapSize) {		// === 1 && > 0
+				divCount[gapSize]++;
+				gapSize = 0;				// reset gap size
+			}
+			gapSize += !cellState;
+		}
+		if (gapSize) {
+			divCount[gapSize]++;
+		}
+
+		for (var key in divCount) {
+			divValue += (10 - Number(key)) * divCount[key];
+		}
+		xyMap.set(value, divValue);
+	}
+}
+initXY();
+
+var zMap = new Map();
+function initZ() {
+	for (let value = 0; value < 512; value++) {
+		let divCount = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
+		let divValue = 0;
+
+		var traverseMap;
+		var blockSetStates = [[], [], []];
+
+		var v = value;
+		for (let i = 8; i >= 0; i--) {
+			var cellState = v % 2;
+			v = Math.floor(v / 2);
+			var row = Math.floor(i / 3);
+			var col = i % 3;
+			blockSetStates[row][col] = cellState;
+		}
+		var getMatrixGapCount = function (row, col) {
+			let gapCount = 0;
+
+			if (row < GAME_INFO.BOARD_BLOCK_SET_WIDTH
+				&& col < GAME_INFO.BOARD_BLOCK_SET_WIDTH
+				&& !traverseMap[row * GAME_INFO.BOARD_BLOCK_SET_WIDTH + col]
+				&& blockSetStates[row][col]) {
+
+				traverseMap[row * GAME_INFO.BOARD_BLOCK_SET_WIDTH + col] = true;
+
+				gapCount = 1
+					+ getMatrixGapCount(row + 1, col)
+					+ getMatrixGapCount(row, col + 1);
+				//+ getMatrixGapCount( blockSetOffset, row + 1  , col + 1 );        TODO: oriental should be considered later
+			}
+
+			return gapCount;
+		};
+
+		traverseMap = { 0: false, 1: false, 2: false, 3: false, 4: false, 5: false, 6: false, 7: false, 8: false }; // reset block traverse state
+		for (let j = 0; j < GAME_INFO.BOARD_BLOCK_SET_WIDTH; j++) {
+			for (let i = 0; i < GAME_INFO.BOARD_BLOCK_SET_WIDTH; i++) {
+				let gapSize = getMatrixGapCount(j, i);
+				if (gapSize) {
+					divCount[gapSize]++
+				}
+			}
+		}
+
+		for (var key in divCount) {
+			divValue += (10 - Number(key)) * divCount[key];
+		}
+
+		zMap.set(value, divValue);
+	}
+}
+initZ();
 class slover {
 	constructor() {
 		this.board = [
@@ -507,6 +590,13 @@ class slover {
 			[0, 0, 0, 0, 0, 0, 0, 0, 0]];
 	}
 
+	clone() {
+		var newSolver = new slover();
+		for (var i = 0; i < GAME_INFO.BOARD_SIZE_BLOCK; i++) {
+			newSolver.board[i] = this.board[i].slice();
+		}
+		return newSolver;
+	}
 	canEliminateRow(row) {
 		for (let i = 0; i < GAME_INFO.BOARD_SIZE_BLOCK; i++) {
 			if (this.board[row][i] === 0) return false;
@@ -603,6 +693,21 @@ class slover {
 		}
 	}
 
+	getBlockSet_fast(blockSetIndex) {
+		blockSetIndex = Number(blockSetIndex);
+		let result = 0;
+		let x = blockSetIndex % GAME_INFO.BOARD_BLOCK_SET_WIDTH * GAME_INFO.BOARD_BLOCK_SET_WIDTH;
+		let y = Math.floor(blockSetIndex / GAME_INFO.BOARD_BLOCK_SET_WIDTH) * GAME_INFO.BOARD_BLOCK_SET_WIDTH;
+
+		for (let j = 0; j < GAME_INFO.BOARD_BLOCK_SET_WIDTH; j++) {
+			var row = j + y;
+			for (let i = 0; i < GAME_INFO.BOARD_BLOCK_SET_WIDTH; i++) {
+				result = result * 2 + this.board[row][i + x];
+			}
+		}
+		return result;
+	}
+
 	getBlockSet(blockSetIndex) {
 		blockSetIndex = Number(blockSetIndex);
 		let resultSet = {};
@@ -624,6 +729,22 @@ class slover {
 		return resultSet;
 	}
 
+
+	getX_fast() {
+		let divValue = 0;
+
+		for (let i = 0; i < GAME_INFO.BOARD_SIZE_BLOCK; i++) {
+			var key = 0;
+			for (let j = 0; j < GAME_INFO.BOARD_SIZE_BLOCK; j++) {
+				key = key * 2 + this.board[j][i];
+			}
+			divValue += xyMap.get(key);
+		}
+		divValue /= GAME_INFO.BOARD_SIZE_BLOCK * 45;   // normalise the value according to the worst case value ( 9 * 45 )
+		divValue = Math.round(divValue * 100) / 100;  // 2 decimal precision
+
+		return divValue;
+	}
 	// X: avg sparsity of cols  // column integrity
 	getX() {
 		let resultSet = {
@@ -657,6 +778,21 @@ class slover {
 	}
 
 	// Y: avg sparsity of rows // row integrity
+	getY_fast() {
+		let divValue = 0;
+
+		for (let j = 0; j < GAME_INFO.BOARD_SIZE_BLOCK; j++) {
+			var key = 0;
+			for (let i = 0; i < GAME_INFO.BOARD_SIZE_BLOCK; i++) {
+				key = key * 2 + this.board[j][i];
+			}
+			divValue += xyMap.get(key);
+		}
+		divValue /= GAME_INFO.BOARD_SIZE_BLOCK * 45;   // normalise the value according to the worst case value ( 9 * 45 )
+		divValue = Math.round(divValue * 100) / 100;  // 2 decimal precision
+
+		return divValue;
+	}
 	getY() {
 		let resultSet = {
 			divCount: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 },
@@ -689,6 +825,19 @@ class slover {
 	}
 
 	// Z: avg sparsity of 9-blocks // 9 sets integrity
+	getZ_fast() {
+		let divValue = 0;
+
+		for (let index = 0; index < GAME_INFO.BOARD_SIZE_BLOCK; index++) {
+			var blockSetStates = this.getBlockSet_fast(index);
+			divValue += zMap.get(blockSetStates);
+		}
+
+		divValue /= GAME_INFO.BOARD_SIZE_BLOCK * 45;   // normalise the value according to the worst case value ( 9 * 45 )
+		divValue = Math.round(divValue * 100) / 100;  // 2 decimal precision
+
+		return divValue;
+	}
 	getZ() {
 		let resultSet = {
 			divCount: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 },
@@ -845,9 +994,14 @@ class slover {
 	};
 
 	evaluateStatus() {
-		let score = this.chromosome.a * this.getX().divValue
-			+ this.chromosome.b * this.getY().divValue
-			+ this.chromosome.c * this.getZ().divValue
+		//let slow = this.getZ().divValue;
+		//let fast = this.getZ_fast();
+		//if (slow !== fast) {
+		//	let stop = 3;
+		//}
+		let score = this.chromosome.a * this.getX_fast() //this.getX().divValue
+			+ this.chromosome.b * this.getY_fast()	//this.getY().divValue
+			+ this.chromosome.c * this.getZ_fast();	// this.getZ().divValue
 			+ this.chromosome.d * this.getW()
 			//+ this.chromosome.e * getOccupationOfElement(element)
 			+ this.chromosome.f
@@ -903,7 +1057,10 @@ function clone(obj) {
 	return o;
 }
 
-//solution = {step: [{x, y, shape},], strik, score];
+//solution = {step: [{x, y, shape},], strik, score, statusScore];
+function cloneSolution(solution) {
+	return { step: solution.step.slice(), strik: solution.strik, score: solution.score, statusScore: solution.statusScore };
+}
 function dfs(solver, shapes, index, bestSolution, solution) {
 	// 如果所有形状都已放置，更新最优解  
 	if (index === shapes.length) {
@@ -919,11 +1076,11 @@ function dfs(solver, shapes, index, bestSolution, solution) {
 			// 如果形状可以放置  
 			if (solver.canPutAt(col, row, shape)) {
 				// 放置形状  
-				let newSolver = clone(solver);
+				let newSolver = solver.clone(); //clone(solver);
 				newSolver.putAt(col, row, shape);
 				let eliminationCount = newSolver.checkAndEliminate();
 				let nextStrik = eliminationCount > 0 ? solution.strik + 1 : 0;
-				let newSolution = clone(solution);
+				let newSolution = cloneSolution(solution);	// clone(solution);
 				newSolution.step.push({ x: col, y: row, shape: shape });
 				newSolution.strik = nextStrik;
 				newSolution.score += GetScore(shape, eliminationCount, solution.strik);
