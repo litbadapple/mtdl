@@ -134,6 +134,11 @@ var shapes = [
 
 	{ w: 2, h: 2, s: [1, 1, 1, 1], score: 4 },
 	{ w: 3, h: 3, s: [0, 1, 0, 1, 1, 1, 0, 1, 0], score: 5 },
+
+	{ w: 3, h: 3, s: [1, 0, 0, 1, 1, 1, 0, 0, 1], score: 5 },
+	{ w: 3, h: 3, s: [0, 0, 1, 1, 1, 1, 1, 0, 0], score: 5 },
+	{ w: 3, h: 3, s: [0, 1, 1, 0, 1, 0, 1, 1, 0], score: 5 },
+	{ w: 3, h: 3, s: [1, 1, 0, 0, 1, 0, 0, 1, 1], score: 5 }
 ];
 
 const rate_0 = [[0, 9], [1, 18], [2, 9], [4, 9], [5, 18], [6, 9], [55, 28]];
@@ -492,7 +497,7 @@ function backtrack(arr, used, current, result) {
 	}
 }
 
-var xyMap = new Map();
+var xyMap = [];
 function initXY() {
 	for (let value = 0; value < 512; value++) {
 		let divCount = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
@@ -517,12 +522,12 @@ function initXY() {
 		for (var key in divCount) {
 			divValue += (10 - Number(key)) * divCount[key];
 		}
-		xyMap.set(value, divValue);
+		xyMap.push(divValue);
 	}
 }
 initXY();
 
-var zMap = new Map();
+var zMap = [];
 function initZ() {
 	for (let value = 0; value < 512; value++) {
 		let divCount = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
@@ -572,7 +577,7 @@ function initZ() {
 			divValue += (10 - Number(key)) * divCount[key];
 		}
 
-		zMap.set(value, divValue);
+		zMap.push(divValue);
 	}
 }
 initZ();
@@ -738,7 +743,7 @@ class slover {
 			for (let j = 0; j < GAME_INFO.BOARD_SIZE_BLOCK; j++) {
 				key = key * 2 + this.board[j][i];
 			}
-			divValue += xyMap.get(key);
+			divValue += xyMap[key];
 		}
 		divValue /= GAME_INFO.BOARD_SIZE_BLOCK * 45;   // normalise the value according to the worst case value ( 9 * 45 )
 		divValue = Math.round(divValue * 100) / 100;  // 2 decimal precision
@@ -786,7 +791,7 @@ class slover {
 			for (let i = 0; i < GAME_INFO.BOARD_SIZE_BLOCK; i++) {
 				key = key * 2 + this.board[j][i];
 			}
-			divValue += xyMap.get(key);
+			divValue += xyMap[key];
 		}
 		divValue /= GAME_INFO.BOARD_SIZE_BLOCK * 45;   // normalise the value according to the worst case value ( 9 * 45 )
 		divValue = Math.round(divValue * 100) / 100;  // 2 decimal precision
@@ -830,7 +835,7 @@ class slover {
 
 		for (let index = 0; index < GAME_INFO.BOARD_SIZE_BLOCK; index++) {
 			var blockSetStates = this.getBlockSet_fast(index);
-			divValue += zMap.get(blockSetStates);
+			divValue += zMap[blockSetStates];
 		}
 
 		divValue /= GAME_INFO.BOARD_SIZE_BLOCK * 45;   // normalise the value according to the worst case value ( 9 * 45 )
