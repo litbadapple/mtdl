@@ -51,15 +51,18 @@
 								</td>
 							</tr>
 							<tr>
-								<td align="center">
-									<button type="button" id="InputButton" class="disable-dbl-tap-zoom" style="font-size:18px">选好啦!</button>
-									<button type="button" class="btn btn-primary btn-sm disable-dbl-tap-zoom" style="font-size:18px" id="step" disabled>
-										<i class="fa fa-caret-right"></i> 下一步
-									</button>
-									<button type="button" class="btn btn-warning btn-sm disable-dbl-tap-zoom" style="font-size:18px" id="reset" >
-										保存
-									</button>
-								</td>
+                                <td align="center">
+                                    <button type="button" id="InputButton" class="disable-dbl-tap-zoom" style="font-size:18px">选好啦!</button>
+                                    <button type="button" class="btn btn-primary btn-sm disable-dbl-tap-zoom" style="font-size:18px" id="step" disabled>
+                                        <i class="fa fa-caret-right"></i> 下一步
+                                    </button>
+                                    <button type="button" class="btn btn-warning btn-sm disable-dbl-tap-zoom" style="font-size:18px" id="edit">
+                                        设置盘面
+                                    </button>
+                                    <button type="button" class="btn btn-warning btn-sm disable-dbl-tap-zoom" style="font-size:18px" id="reset">
+                                        保存
+                                    </button>
+                                </td>
 							</tr>
 						</tbody>
 					</table>
@@ -116,36 +119,46 @@
 	var curStep = 0;
 
 	function onSelectButtonPress() {
-		if (selectedShape.length == 3) {
-			shapeList.push({ 'round': round, 'shapes': selectedShape.slice() });
+		if (boardStatus === c_BoardStatus.SELECT_SHAPE) {
+			if (selectedShape.length == 3) {
+				shapeList.push({ 'round': round, 'shapes': selectedShape.slice() });
 
-			var score = 0;
-            for (const shape of selectedShape) {
-				for (const s of shape.s) {
-					score += s;				
+				var score = 0;
+				for (const shape of selectedShape) {
+					for (const s of shape.s) {
+						score += s;
+					}
 				}
+				selectButton.disabled = true;
+				selectcanvas.clearSelect();
+				selectcanvas.enable = false;
+
+				roundcanvas.draw([]);
+				total += score;
+				console.log(`round ${round}: ${score}, total ${total}`);
+				round++;
+				ShowStatus("计算中，请等待...");
+
+				// 新一轮放置，只需要保留strik和score
+				bestSolution.step = [];
+				bestSolution.statusScore = 1000000;
+				requestIdleCallback(() => {
+					if (putShapes(solv, selectedShape, bestSolution)) {
+						curStep = 0;
+						ShowStatus("请跟随放置，然后点击下一步按钮");
+						onStepButtonPress();
+					}
+				});
 			}
-			selectButton.disabled = true;
-			selectcanvas.clearSelect();
-			selectcanvas.enable = false;
-
-			roundcanvas.draw([]);
-			total += score;
-			console.log(`round ${round}: ${score}, total ${total}`);
-			round++;
-            ShowStatus("计算中，请等待...");
-
-			// 新一轮放置，只需要保留strik和score
-			bestSolution.step = [];
-			bestSolution.statusScore = 1000000;
-			requestIdleCallback(() => {
-				if (putShapes(solv, selectedShape, bestSolution)) {
-					curStep = 0;
-                    ShowStatus("请跟随放置，然后点击下一步按钮");
-					onStepButtonPress();
-				}
-			});
 		}
+		else if (boardStatus === c_BoardStatus.EDIT) {
+			selectedShape = [];
+			boardStatus = c_BoardStatus.SELECT_SHAPE;
+			selectcanvas.enable = true;
+            ShowStatus("请选择本轮所用3个图案, 完成后点‘选好了’按钮");
+			Object.assign(solv.board, outCanvas.board);
+			updateButtonStatus();
+        }
 	}
 
 	function onStepButtonPress() {
@@ -166,7 +179,7 @@
 					// 保留现有的显示即可，请用户选择下一轮
 					stepButton.disabled = true;
 					selectcanvas.enable = true;
-					ShowStatus("请选择本轮所用3个图案");
+                    ShowStatus("请选择本轮所用3个图案, 完成后点‘选好了’按钮");
 				}
 			}
 			else {
@@ -177,7 +190,7 @@
             stepButton.disabled = true;
             selectcanvas.enable = true;
 			outCanvas.drawBoard(solv.board);
-            ShowStatus("请选择本轮所用3个图案");
+            ShowStatus("请选择本轮所用3个图案, 完成后点‘选好了’按钮");
 		}
 	}
 
@@ -192,13 +205,38 @@
 		document.body.removeChild(element);
 	} 
 
+	const c_BoardStatus = { SELECT_SHAPE: 0, EDIT: 1, MOVE: 2, CAL: 3 };
+    var boardStatus = c_BoardStatus.EDIT;
+
     function ShowStatus(string) {
         document.getElementById('status').innerHTML = string;
 	}
 
-	ShowStatus("请选择本轮所用3个图案");
-    selectButton.disabled = true;
+	//ShowStatus("请选择本轮所用3个图案");
+ //   selectButton.disabled = true;
 
+	function updateButtonStatus() {
+		switch (boardStatus) {
+            case c_BoardStatus.SELECT_SHAPE:
+			case c_BoardStatus.EDIT:
+				stepButton.disabled = true;
+                resetButton.disabled = true;
+                editButton.disabled = true;
+                selectButton.disabled = false;
+				return;
+			case c_BoardStatus.CAL:
+                stepButton.disabled = true;
+                resetButton.disabled = true;
+                editButton.disabled = true;
+                selectButton.disabled = true;
+				return;
+			case c_BoardStatus.MOVE:
+                stepButton.disabled = false;
+                resetButton.disabled = false;
+                editButton.disabled = false;
+                selectButton.disabled = false;
+        }
+    }
 	let stepButton = document.getElementById('step');
 	stepButton.addEventListener('click', onStepButtonPress);
 	let resetButton = document.getElementById('reset');
@@ -206,6 +244,15 @@
 	function onResetButtonPress() {
 		download(JSON.stringify(shapeList), `mtdl_fkds_${round}.json`);
 	}		
+    let editButton = document.getElementById('edit');
+    editButton.addEventListener('click', onEditButtonPress);
+	function onEditButtonPress() {
+        ShowStatus("请使用鼠标设置盘面, 完成后点‘选好了’按钮");
+        selectcanvas.enable = false;
+		outCanvas.enableEdit(true);
+		boardStatus = c_BoardStatus.EDIT;
+		updateButtonStatus();
+    }
 	//let counter = document.querySelector('#counter');
 
 	const isMobile = /(iPhone|iPad|iPod|iOS|Android|Linux armv8l|Linux armv7l|Linux aarch64)/i.test(navigator.platform);
@@ -214,6 +261,10 @@
 		document.body.style.zoom = 2;
 	else
 		document.body.style.zoom = 1;
+
+    // 初始为设置盘面，禁止选择方块
+	onEditButtonPress();
+
 </script>
 
 </body>

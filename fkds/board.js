@@ -27,23 +27,29 @@ class board extends canvas {
 	}
 
 	draw() {
-		for (var x = this.spacing; x < this.width; x += this.blockSize + this.spacing) {
-			for (var y = this.spacing; y < this.width; y += this.blockSize + this.spacing) {
+		for (var x = this.spacing, col = 0; x < this.width; x += this.blockSize + this.spacing, col++) {
+			for (var y = this.spacing, row = 0; y < this.width; y += this.blockSize + this.spacing, row++) {
 				var colorId = (Math.floor(x / 3 / this.blockSize) + Math.floor(y / 3 / this.blockSize)) % 2;
+				if (this.board[row][col] === 1)
+					colorId = 2;
 				this.drawRoundedRect(x, y, blockSize, blockSize, 3, this.color[colorId]);
 			}
 		}
 	}
 
+	board = [
+		[0, 0, 0, 0, 0, 0, 0, 0, 0],
+		[0, 0, 0, 0, 0, 0, 0, 0, 0],
+		[0, 0, 0, 0, 0, 0, 0, 0, 0],
+		[0, 0, 0, 0, 0, 0, 0, 0, 0],
+		[0, 0, 0, 0, 0, 0, 0, 0, 0],
+		[0, 0, 0, 0, 0, 0, 0, 0, 0],
+		[0, 0, 0, 0, 0, 0, 0, 0, 0],
+		[0, 0, 0, 0, 0, 0, 0, 0, 0],
+		[0, 0, 0, 0, 0, 0, 0, 0, 0]];
 	drawBoard(board) {
-		for (var x = this.spacing, col = 0; x < this.width; x += this.blockSize + this.spacing, col++) {
-			for (var y = this.spacing, row = 0; y < this.width; y += this.blockSize + this.spacing, row++) {
-				var colorId = (Math.floor(x / 3 / this.blockSize) + Math.floor(y / 3 / this.blockSize)) % 2;
-				if (board[row][col] === 1)
-					colorId = 2;
-				this.drawRoundedRect(x, y, blockSize, blockSize, 3, this.color[colorId]);
-			}
-		}
+		Object.assign(this.board, board);
+		this.draw();
 	}
 	drawShape(x, y, shape) {
 		for (var j = 0; j < shape.h; j++) {
@@ -62,7 +68,24 @@ class board extends canvas {
 			return { x: x, y: y };
 		else
 			return null;
-    }
+	}
+	enableEdit(enable) {
+		if (enable) {
+			this.canvas.onclick = event => this.onClick(event);
+		}
+		else {
+			this.canvas.onclick = null;
+		}
+	}
+
+	onClick(event) {
+		let x = Math.floor((event.offsetX - this.spacing) / (this.spacing + this.blockSize));
+		let y = Math.floor((event.offsetY - this.spacing) / (this.spacing + this.blockSize));
+		if (x >= 0 && x < 9 && y >= 0 && y < 9) {
+			this.board[y][x] = this.board[y][x] ? 0 : 1;
+			this.draw();
+        }
+	}
 }
  
 var shapes = [
@@ -945,33 +968,28 @@ class slover {
 			traverseMap.push(false);          // set default block traverse state to 'false'
 		}
 
-		var getMatrixGapCount = function (board, offset) {
+		var getMatrixGapCount = function (board, x, y) {
 			let gapCount = 0;
-			let cellIndex = offset.y * GAME_INFO.BOARD_SIZE_BLOCK + offset.x;
+			let cellIndex = y * GAME_INFO.BOARD_SIZE_BLOCK + x;
 
-			if (offset.y < GAME_INFO.BOARD_SIZE_BLOCK
-				&& offset.x < GAME_INFO.BOARD_SIZE_BLOCK
+			if (y < GAME_INFO.BOARD_SIZE_BLOCK
+				&& x < GAME_INFO.BOARD_SIZE_BLOCK
 				&& !traverseMap[cellIndex]
-				&& board[offset.y][offset.x]) {
+				&& board[y][x]) {
 
 				traverseMap[cellIndex] = true;
 
 				gapCount = 1    // add current cell state
-					+ getMatrixGapCount(board, { x: offset.x + 1, y: offset.y })
-					+ getMatrixGapCount(board, { x: offset.x, y: offset.y + 1 })
-					+ getMatrixGapCount(board, { x: offset.x + 1, y: offset.y + 1 });        // TODO: oriental should be considered later
+					+ getMatrixGapCount(board, x + 1, y)
+					+ getMatrixGapCount(board, x, y + 1)
+					+ getMatrixGapCount(board, x + 1, y + 1);        // TODO: oriental should be considered later
 			}
 
 			return gapCount;
 		};
 
 		for (let index = 0; index < GAME_INFO.BOARD_SIZE_BLOCK * GAME_INFO.BOARD_SIZE_BLOCK; index++) {
-			let gapSize = getMatrixGapCount(this.board, 
-				{
-					x: index % GAME_INFO.BOARD_SIZE_BLOCK,
-					y: Math.floor(index / GAME_INFO.BOARD_SIZE_BLOCK)
-				}
-			);
+			let gapSize = getMatrixGapCount(this.board, index % GAME_INFO.BOARD_SIZE_BLOCK, Math.floor(index / GAME_INFO.BOARD_SIZE_BLOCK));
 			if (gapSize) {
 				resultSet.divCount[gapSize]++
 			}
@@ -1016,13 +1034,19 @@ class slover {
 	}
 }
 
-function bestSolutionCheck(bestSolution, solution, statusScore) {
+function bestSolutionCheck(bestSolution, solution, solver) {
 	if ((bestSolution.step.length === 0) ||
 		(solution.score > bestSolution.score) ||
-		(solution.score === bestSolution.score && solution.strik > bestSolution.strik) ||
-		(solution.score === bestSolution.score && solution.strik === bestSolution.strik && bestSolution.statusScore > statusScore)) {
+		(solution.score === bestSolution.score && solution.strik > bestSolution.strik)) {
 		Object.assign(bestSolution, solution);
-		bestSolution.statusScore = statusScore;
+		bestSolution.statusScore = solver.evaluateStatus();
+	}
+	else if (solution.score === bestSolution.score && solution.strik === bestSolution.strik) {
+		let statusScore = solver.evaluateStatus();
+		if (bestSolution.statusScore > statusScore) {
+			Object.assign(bestSolution, solution);
+			bestSolution.statusScore = statusScore;
+		}
 	}
 }
 
@@ -1069,7 +1093,7 @@ function cloneSolution(solution) {
 function dfs(solver, shapes, index, bestSolution, solution) {
 	// 如果所有形状都已放置，更新最优解  
 	if (index === shapes.length) {
-		bestSolutionCheck(bestSolution, solution, solver.evaluateStatus());
+		bestSolutionCheck(bestSolution, solution, solver);
 		return;
 	}
 
