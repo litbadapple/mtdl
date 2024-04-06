@@ -191,6 +191,7 @@ class GameDisplay {
                 colorSelecting = false;
                 this.selector.style.visibility = 'hidden';
                 movingProblem = problem;
+                FixQuestionMark(movingProblem);
                 this.show(movingProblem);
 
                 // 根据翻出的颜色，更新原始问题
@@ -198,7 +199,7 @@ class GameDisplay {
                 orgBottle.setColor(bottle.m_blanks, id);
                 orgBottle.Update();
                 orgProblemChanged = true;
-								currentStatus = status.solving;
+				currentStatus = status.solving;
                 requestIdleCallback(() => { SolveProblem(movingProblem, false); });
             }
         }
@@ -211,8 +212,14 @@ class GameDisplay {
 
         for (const [i, dims] of this.vialDimensions.entries()) {
             const [x, y, width, height] = dims;
-            this.drawVial(x, y, width, height);
-            this.fillSegments(x, y, width, height, problem.bottles[i], problem.color);
+            if (problem.bottles[i].m_blocks == 1) {
+                this.drawSmallBottle(x, y, width, height);
+                this.fillSmallBottleSegments(x, y, width, height, problem.bottles[i], problem.color);
+            }
+            else {
+                this.drawVial(x, y, width, height);
+                this.fillSegments(x, y, width, height, problem.bottles[i], problem.color);
+            }
         }
     }
 
@@ -220,6 +227,18 @@ class GameDisplay {
         this.ctx.beginPath();
         this.ctx.moveTo(x, y);
         this.ctx.lineTo(x + width, y);
+        this.ctx.lineTo(x + width, y + height);
+        this.ctx.arc(x + width / 2, y + height, width / 2, 0, Math.PI, false);
+        this.ctx.closePath();
+        this.ctx.stroke();
+    }
+
+    drawSmallBottle(x, y, width, height, colors) {
+        const dy = height / 8;
+        const top = y + 3 * 2 * dy;
+        this.ctx.beginPath();
+        this.ctx.moveTo(x, top);
+        this.ctx.lineTo(x + width, top);
         this.ctx.lineTo(x + width, y + height);
         this.ctx.arc(x + width / 2, y + height, width / 2, 0, Math.PI, false);
         this.ctx.closePath();
@@ -265,6 +284,19 @@ class GameDisplay {
         else {
             this.fillVialSegmentBottom(x1, y + 7 * dy, x2, y + 8 * dy, colors[color]);
         }
+    }
+
+    fillSmallBottleSegments(x, y, width, height, bottle, colors) {
+        // Split the vial rectangle into 8 strips. The top strip will be empty;
+        // Each segment will consist of 2 strips; the bottom segment will have
+        // one rectangular strip and one semicircular arc.
+        const dy = height / 8;
+        const pad = this.ctx.lineWidth / 2;
+        const x1 = x + pad;
+        const x2 = x + width - pad;
+
+        let color = bottle.getColor(0);
+        this.fillVialSegmentBottom(x1, y + 7 * dy, x2, y + 8 * dy, colors[color]);
     }
 
     fillVialSegmentRect(ctx, x1, y1, x2, y2, color) {

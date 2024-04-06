@@ -14,23 +14,40 @@ class Bottle
 		this.m_blocks = blocks;
 	}	
 
-	//getState() {
-	//	var state = '';
-	//	for (var char of this.m_color) {
-	//		state += String.fromCharCode(char + 63);
-	//	}
-	//	return state;
-	//}
-	getState() {
-		var state = new Array();
-
-		for (var i = 0; i < this.m_color.length - 1; i += 2) {
-			var char = String.fromCharCode(this.m_color[i] << 4 | this.m_color[i + 1]);
-			state.push(char);
+	initBottle() {
+		for (let i = 0; i < this.m_blocks; i++) {
+			this.m_color.push(BLOCK_BLANK);
 		}
-
-		return state.join('');
+		this.m_top = BLOCK_BLANK;
+		this.m_blanks = this.m_blocks;
+		this.m_unknowns = 0;
+		this.m_isOK = false;
 	}
+
+	getState() {
+		var state = '';
+		if (this.m_isOK)
+			return state;
+		for (var char of this.m_color) {
+			state += String.fromCharCode(char + 63);
+		}
+		return state;
+	}
+	//getState() {
+	//	if (this.m_blocks == 1) {
+	//		return String.fromCharCode(this.m_color[0]);
+	//	}
+	//	else {
+	//		var state = new Array();
+
+	//		for (var i = 0; i < this.m_color.length - 1; i += 2) {
+	//			var char = String.fromCharCode(this.m_color[i] << 4 | this.m_color[i + 1]);
+	//			state.push(char);
+	//		}
+
+	//		return state.join('');
+	//	}
+	//}
 
 	getColor(index)
 	{
@@ -46,7 +63,7 @@ class Bottle
 
 	empty()
 	{
-		return this.m_blanks == 4;
+		return this.m_blanks == this.m_blocks;
 	}
 
 	blanks()
@@ -177,32 +194,46 @@ class Bottle
 		return true;
 	}
 
-	pureTo(other)
-	{
-		var blocks = 0;
-		while (this.canPureTo(other))
-		{	
-			if (other.m_blanks > 0)
-			{
+	pureTo(other) {
+		if (this.canPureTo(other)) {
+			const top = this.m_top;
+			while (other.m_blanks > 0 && this.m_top == top) {
 				other.m_blanks--;
 				other.setColor(other.m_blanks, this.m_top);
-				other.m_top = this.m_top;
-
 				this.setColor(this.m_blanks, BLOCK_BLANK);
 				this.m_blanks++;
-				this.m_isOK = false;	// 倒出了水，肯定不满了
-				++blocks;
+				this.m_top = this.m_blanks >= this.m_blocks ? BLOCK_BLANK : this.getColor(this.m_blanks);
 			}
-			else
-			{
-				// 错误
-				return 0;
-			}
-			this.m_top = this.topColor();
+			other.m_top = top;
+			other.m_isOK = other.isOK();
+			this.m_isOK = false;	// 倒出了水，肯定不满了
 		}
-		other.m_isOK = other.isOK();
-		return blocks;
 	}
+
+	//pureTo(other)
+	//{
+	//	while (this.canPureTo(other))
+	//	{	
+	//		if (other.m_blanks > 0)
+	//		{
+	//			other.m_blanks--;
+	//			other.setColor(other.m_blanks, this.m_top);
+	//			other.m_top = this.m_top;
+
+	//			this.setColor(this.m_blanks, BLOCK_BLANK);
+	//			this.m_blanks++;
+	//			this.m_isOK = false;	// 倒出了水，肯定不满了
+	//		}
+	//		else
+	//		{
+	//			// 错误
+	//			return;
+	//		}
+	//		this.m_top = this.topColor();
+	//	}
+	//	other.m_isOK = other.isOK();
+	//	return;
+	//}
 
 	pureBlocksTo(other, blocks)
 	{
@@ -307,9 +338,19 @@ function GetBlanks(problem)
 	var blanks = 0;
 	for (var bottle of problem.bottles)
 	{
-		blanks += bottle.m_blanks;
+		if (bottle.m_blocks == 4)
+			blanks += bottle.m_blanks;
 	}
 	return blanks;
+}
+
+function GetFullBottles(problem) {
+	var bottles = 0;
+	for (var bottle of problem.bottles) {
+		//if (bottle.m_blocks == 4)
+			bottles ++;
+	}
+	return bottles;
 }
 
 function GetUnknowns(problem)
@@ -359,17 +400,17 @@ function IsDuplicateProblem(problem) {
 function CheckProblem(problem)
 {
 	let blanks = GetBlanks(problem);
-	if (blanks <= 0 || blanks % 4) return false;	// 没有空位，或者空位不是4的整数倍
-
-	let bottles = problem.bottles.length;
+	//if (blanks <= 0 || blanks % 4) return false;	// 没有空位，或者空位不是4的整数倍
+	
+	let bottles = GetFullBottles(problem);
 	let colors = GetColors(problem);
 	let unknowns = GetUnknowns(problem);
 
 	if (unknowns < 4)
 	{
 		// 只有未知块小于4时，才能检查颜色总数是否合适
-		var colorCount = colors.length;
-		if (colorCount + blanks / 4 != bottles) return false;
+		//var colorCount = colors.length;
+		//if (colorCount + blanks / 4 != bottles) return false;
 
 		let lackColorBlocks = 0;
 		for (var color of colors)
@@ -421,6 +462,7 @@ function cloneProblem(problem) {
 		b.m_blanks = bottle.m_blanks;
 		b.m_unknowns = bottle.m_unknowns;
 		b.m_isOK = bottle.m_isOK;
+		b.m_blocks = bottle.m_blocks;
 		cloned.bottles.push(b);
 	}
 	return cloned;
@@ -429,17 +471,30 @@ function cloneProblem(problem) {
 // 检查是否已经完成
 function IsSolved(problem)
 {
-	let blanks = GetBlanks(problem) / 4;
 	let size = problem.bottles.length;
-	var oks = 0;
 	for (var i = 0; i < size; i++)
 	{
-		if (problem.bottles[i].m_isOK)
-			oks++;
+		if (problem.bottles[i].m_ok || problem.bottles[i].isSameColor() || problem.bottles[i].m_blanks == problem.bottles[i].m_blocks)
+			continue;
+		else
+			return false;
 	}
-	return oks == size - blanks;
+	return true;
 }
 
+function FinishPure(problem, pure) {
+	let bottles = problem.bottles;
+	for (var i = 0; i < bottles.length - 1; i++) {
+		if (!bottles[i].m_isOK && bottles[i].isSameColor()) {
+			for (var j = i + 1; j < bottles.length; j++) {
+				if (bottles[j].canPureTo(bottles[i])) {
+					bottles[j].pureTo(bottles[i]);
+					pure.push({ 'from': j, 'to': i });
+				}
+			}
+		}
+	}
+}
 function FindPossibleNext(problem, nextDeep)
 {
 	let bottles = problem.problem.bottles;
@@ -454,6 +509,7 @@ function FindPossibleNext(problem, nextDeep)
 							var pure = problem.pure.slice();//clone(problem.pure);	//加速
 							pure.push({ 'from': i, 'to': j });
 							if (IsSolved(newProblem)) {
+								FinishPure(newProblem, pure);
 								return pure;
 							}
 							else {
@@ -600,6 +656,33 @@ function FindMoreUnkonwnsDeep(problemList, best)
 	}
 	if (nextDeep.length > 0)
 		FindMoreUnkonwnsDeep(nextDeep, best);
+}
+
+function FixQuestionMark(problem) {
+	let unknowns = GetUnknowns(problem);
+	if (unknowns === 1) {
+		// 对于只有一个问号的，是可以找出来它应该是啥颜色的哦
+		let colors = GetColors(problem);
+		let colorUnknown = 0;
+		for (var color of colors) {
+			if (color.count < 4) {
+				colorUnknown = color.index;
+				break;
+			}
+		}
+		for (var bottle of problem.bottles) {
+			for (var i = 0; i < bottle.m_blocks; i++) {
+				var index = bottle.getColor(i);
+				if (index == BLOCK_UNKNOWN) {
+					bottle.setColor(i, colorUnknown);
+					bottle.Update();
+				}
+			}
+		}
+		return true;
+	}
+	else
+		return false;
 }
 
 // 有少量问号，试图找出一定能解出来的
